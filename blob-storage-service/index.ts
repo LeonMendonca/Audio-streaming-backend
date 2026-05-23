@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import * as mm from "music-metadata";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -40,23 +41,45 @@ app.get(
   verifySignedUrl,
   async (req, res) => {
     const key = req.params.key;
-    const blob = await db.query(
-      "SELECT * FROM blobs WHERE key = $1",
-      [key]
-    );
+    const range = req.headers.range;
 
-    if (!blob.rows.length) {
+    const sizeResult = await db.query(`
+      SELECT OCTET_LENGTH(data)::bigint as size FROM blobs WHERE key = $1
+    `, [key]);
+
+    if (!sizeResult.rows.length) {
       return res.sendStatus(404);
     }
 
-    const audio = blob.rows[0];
+    const fileSize = parseInt(sizeResult.rows[0].size, 10);
 
-    res.setHeader(
-      "Content-Type",
-      "audio/aac"
-    );
+    if (typeof range === "string") {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0] || "0", 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
-    res.send(audio.data);
+      if (start >= fileSize) {
+        res.status(416).send(`Requested range not satisfiable\n${start} >= ${fileSize}`);
+        return;
+      }
+
+      const chunkSize = (end - start) + 1;
+
+      const blob = await db.query(
+        "SELECT SUBSTRING(data FROM $2::int FOR $3::int) as data FROM blobs WHERE key = $1",
+        [key, start + 1, chunkSize] // Postgres substring is 1-indexed
+      );
+
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunkSize,
+        "Content-Type": "audio/mp4",
+      });
+      res.end(blob.rows[0].data);
+    } else {
+      res.status(400).send("Requires Range header");
+    }
   }
 );
 
@@ -67,6 +90,16 @@ app.post(
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No audio file provided" });
+      }
+
+      let durationInSeconds = 0;
+      try {
+        const metadata = await mm.parseBuffer(req.file.buffer, req.file.mimetype);
+        if (metadata.format.duration) {
+          durationInSeconds = metadata.format.duration;
+        }
+      } catch (err) {
+        console.error("Could not parse audio metadata for duration", err);
       }
 
       const tempDir = os.tmpdir();
@@ -81,15 +114,20 @@ app.post(
         { quality: "enhanced", bitrate: "320k" }
       ];
 
-      const trackId = randomUUID();
+      const trackId = req.body.trackId;
+
+      if (!trackId) {
+        return res.status(400).json({ error: "Track ID is required" });
+      }
 
       const processVariant = (variant: typeof variants[0]): Promise<void> => {
         return new Promise((resolve, reject) => {
-          const outputPath = path.join(tempDir, `${inputFilename}_${variant.bitrate}.aac`);
+          const outputPath = path.join(tempDir, `${inputFilename}_${variant.bitrate}.m4a`);
           ffmpeg(inputPath)
             .audioCodec('aac')
             .audioBitrate(variant.bitrate)
-            .format('adts')
+            .format('mp4')
+            .outputOptions('-movflags +faststart')
             .save(outputPath)
             .on('end', async () => {
               try {
@@ -114,9 +152,17 @@ app.post(
       await Promise.all(variants.map((v) => processVariant(v)));
       await fsPromises.unlink(inputPath).catch(() => { });
 
+      const variantDetails = variants.map(v => ({
+        quality: v.quality,
+        bitrate: v.bitrate,
+        key: `${trackId}-${v.quality}`
+      }));
+
       res.status(201).json({
         message: "Audio processed successfully",
-        trackId
+        trackId,
+        duration: durationInSeconds,
+        variants: variantDetails
       });
     } catch (error) {
       console.error(error);
