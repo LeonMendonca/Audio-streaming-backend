@@ -1,0 +1,109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+  runtime      = "bun"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/**
+ * User → Playlist = One-to-Many
+ * Playlist → PlaylistItem = One-to-Many
+ * Song → PlaylistItem = One-to-Many
+ * Artist → Song = One-to-Many
+ * Artist ↔ Song through ArtistSong = Many-to-Many
+ */
+
+model User {
+  userId           String    @id @default(uuid()) @map("UserID")
+  email            String    @unique @map("Email") @db.Citext
+  passwordHash     String    @map("PasswordHash")
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamptz(6)
+  lastLogin        DateTime? @map("LastLogin") @db.Timestamptz(6)
+  subscriptionType String?   @map("SubscriptionType")
+  country          String?   @map("Country")
+
+  // Relations
+  playlists Playlist[]
+
+  @@map("users")
+}
+
+model Playlist {
+  playlistId String   @id @default(uuid()) @map("PlaylistID")
+  ownerId    String   @map("OwnerID")
+  name       String   @map("Name")
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.Timestamptz(6)
+
+  // Relations
+  owner         User           @relation(fields: [ownerId], references: [userId])
+  playlistItems PlaylistItem[]
+
+  @@map("playlists")
+}
+
+model PlaylistItem {
+  playlistId String   @map("PlaylistID")
+  songId     String   @map("SongID")
+  position   Int      @map("Position")
+  addedAt    DateTime @default(now()) @map("AddedAt") @db.Timestamptz(6)
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [playlistId])
+  song     Song     @relation(fields: [songId], references: [songId])
+
+  @@id([playlistId, songId])
+  @@map("playlistitems")
+}
+
+model Song {
+  songId      String    @id @default(uuid()) @map("SongID")
+  title       String    @map("Title")
+  duration    Int       @map("Duration")
+  releaseDate DateTime? @map("ReleaseDate") @db.Date
+  fileURL     String    @map("FileURL")
+  createdAt   DateTime  @default(now()) @map("CreatedAt") @db.Timestamptz(6)
+  artistId    String?   @map("ArtistID")
+
+  // Relations
+  artist        Artist?        @relation(fields: [artistId], references: [artistId])
+  playlistItems PlaylistItem[]
+  artistSongs   ArtistSong[]
+
+  @@map("songs")
+}
+
+model Artist {
+  artistId String  @id @default(uuid()) @map("ArtistID")
+  name     String  @map("Name") @db.Citext
+  country  String? @map("Country")
+  bio      String? @map("Bio")
+  imageUrl String? @map("ImageUrl")
+
+  // Relations
+  songs       Song[]
+  artistSongs ArtistSong[]
+
+  @@map("artists")
+}
+
+// Explicit Many to Many relation
+model ArtistSong {
+  songId   String @map("SongID")
+  artistId String @map("ArtistID")
+
+  // Relations
+  song   Song   @relation(fields: [songId], references: [songId])
+  artist Artist @relation(fields: [artistId], references: [artistId])
+
+  @@id([songId, artistId])
+  @@map("artistssongs")
+}
