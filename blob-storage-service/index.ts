@@ -22,6 +22,14 @@ const db = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+db.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+db.on('connect', () => {
+  console.log('Database connected');
+});
+
 const app = express();
 const port = process.env.PORT || 3001;
 
@@ -34,6 +42,50 @@ app.get("/", (req: Request, res: Response) => {
     version: "1.0.0",
     message: "Welcome to the Blob Storage Service API"
   });
+});
+
+app.get("/health/db", async (req: Request, res: Response): Promise<any> => {
+  try {
+    const dbCheckPromise = db.query(`
+      SELECT 
+        current_database() as database,
+        version() as postgres_version,
+        (SELECT sum(numbackends) FROM pg_stat_database) as active_connections
+    `);
+    
+    // 5-second graceful timeout
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database query timeout')), 5000)
+    );
+
+    const result = await Promise.race([dbCheckPromise, timeoutPromise]) as any;
+    
+    const dbStats = result.rows[0];
+
+    res.status(200).json({
+      status: "connected",
+      pool: {
+        totalCount: db.totalCount,
+        idleCount: db.idleCount,
+        waitingCount: db.waitingCount
+      },
+      system: {
+        database: dbStats.database,
+        version: dbStats.postgres_version,
+        active_connections: parseInt(dbStats.active_connections, 10) || 0
+      }
+    });
+  } catch (error: any) {
+    res.status(503).json({
+      status: "disconnected",
+      error: error.message || "Unknown database error",
+      pool: {
+        totalCount: db.totalCount,
+        idleCount: db.idleCount,
+        waitingCount: db.waitingCount
+      }
+    });
+  }
 });
 
 app.get(
