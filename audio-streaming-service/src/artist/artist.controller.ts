@@ -1,10 +1,9 @@
-import { Controller, FileTypeValidator, MaxFileSizeValidator, ParseFilePipe, Put, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Controller, FileTypeValidator, MaxFileSizeValidator, ParseBoolPipe, ParseFilePipe, Put, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { ArtistService } from './artist.service';
 import { Body, Post } from '@nestjs/common';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import type { Express } from 'express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 
 @Controller('artist')
 export class ArtistController {
@@ -12,9 +11,7 @@ export class ArtistController {
 
   @Post()
   async createArtist(@Body() body: CreateArtistDto) {
-    console.log(body instanceof CreateArtistDto)
-    return body;
-    //return this.artistService.createArtist(body)
+    return this.artistService.createArtist(body)
   }
 
   @UseInterceptors(FilesInterceptor('songs', 10))
@@ -30,10 +27,9 @@ export class ArtistController {
       new FileTypeValidator({
         fileType: /audio\/(mpeg|mp3|wav|ogg)/,
         errorMessage: 'File type must be valid'
-      })
+      }),
     ]
   })) file: Express.Multer.File[]) {
-    console.log(file)
     return "OK"
   }
 

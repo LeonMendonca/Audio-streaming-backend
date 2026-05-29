@@ -67,14 +67,16 @@ model PlaylistItem {
 model Song {
   songId      String    @id @default(uuid()) @map("SongID")
   title       String    @map("Title")
+  genre       String?   @map("Genre")
   duration    Int       @map("Duration")
   releaseDate DateTime? @map("ReleaseDate") @db.Date
-  fileURL     String    @map("FileURL")
   createdAt   DateTime  @default(now()) @map("CreatedAt") @db.Timestamptz(6)
   artistId    String?   @map("ArtistID")
+  albumId     String?   @map("AlbumID")
 
   // Relations
   artist        Artist?        @relation(fields: [artistId], references: [artistId])
+  album         Album?         @relation(fields: [albumId], references: [albumId])
   playlistItems PlaylistItem[]
   artistSongs   ArtistSong[]
 
@@ -91,8 +93,22 @@ model Artist {
   // Relations
   songs       Song[]
   artistSongs ArtistSong[]
+  albums      Album[]
 
   @@map("artists")
+}
+
+model Album {
+  albumId     String   @id @default(uuid()) @map("AlbumID")
+  title       String   @map("Title")
+  releaseDate DateTime? @map("ReleaseDate") @db.Date
+  artistId    String   @map("ArtistID")
+
+  // Relations
+  artist Artist @relation(fields: [artistId], references: [artistId])
+  songs  Song[] 
+
+  @@map("albums")
 }
 
 // Explicit Many to Many relation
