@@ -4,6 +4,7 @@ import { Body, Post } from '@nestjs/common';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { AudioDurationBitratePipe } from './pipes/audio-duration-bitrate.pipe';
 
 @Controller('artist')
 export class ArtistController {
@@ -29,7 +30,7 @@ export class ArtistController {
         errorMessage: 'File type must be valid'
       }),
     ]
-  })) file: Express.Multer.File[]) {
+  }), new AudioDurationBitratePipe()) file: Express.Multer.File[]) {
     return "OK"
   }
 
