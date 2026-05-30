@@ -4,7 +4,7 @@ import { Body, Post } from '@nestjs/common';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { AudioDurationBitratePipe } from './pipes/audio-duration-bitrate.pipe';
+import { AudioPipe } from './pipes/audio.pipe';
 
 @Controller('artist')
 export class ArtistController {
@@ -19,18 +19,19 @@ export class ArtistController {
   @Post('upload')
   async uploadSong(@UploadedFiles(new ParseFilePipe({
     validators: [
-      // Validates file size in bytes
-      new MaxFileSizeValidator({
-        maxSize: 10 * 1024 * 1024,
-        errorMessage: 'File size must be less than 10MB'
-      }),
-      // Validates mimetype
-      new FileTypeValidator({
-        fileType: /audio\/(mpeg|mp3|wav|ogg)/,
-        errorMessage: 'File type must be valid'
-      }),
+      new AudioPipe(
+        {
+          maxDuration: 600,
+          minBitrate: 128000,
+          allowedCodecs: ['mp3', 'aac', 'opus'],
+          allowedExtensions: ['mp3', 'wav', 'ogg', 'mpeg'],
+          maxFileSize: 10 * 1024 * 1024
+        }
+      )
     ]
-  }), new AudioDurationBitratePipe()) file: Express.Multer.File[]) {
+  })) files: Express.Multer.File[]) {
+    console.log("FLE", files)
+    this.artistService.uploadSong(files)
     return "OK"
   }
 
