@@ -4,6 +4,7 @@ import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
 import { CreateSongDto } from './dto/create-song.dto';
 import { RmqService } from 'src/rabbitmq/rabbitmq.service';
+import { Prisma } from '../../generated/prisma/client';
 
 
 @Injectable()
@@ -17,7 +18,7 @@ export class ArtistService {
         // Execute both inserts in a single transaction
         const artist = await this.prisma.$transaction(async (tx) => {
             // Insert artist and get generated ID
-            const insertedArtist = await tx.$queryRaw<{ artistId: string }>`
+            const insertedArtist = await tx.$queryRaw<{ artistId: string }[]>`
                 INSERT INTO artists (name, bio, image_url)
                 VALUES (${name}, ${bio}, ${imageUrl})
                 RETURNING artist_id as "artistId"
@@ -25,7 +26,7 @@ export class ArtistService {
             // Insert default "Misc" album for the new artist
             await tx.$queryRaw`
                 INSERT INTO albums (title, artist_id)
-                VALUES ('Misc', ${insertedArtist.artistId})
+                VALUES ('Misc', ${insertedArtist[0].artistId})
             `;
             return insertedArtist;
         });
@@ -34,37 +35,30 @@ export class ArtistService {
 
     async uploadSong(body: CreateSongDto, file: Express.Multer.File[]) {
         const song = await this.prisma.$transaction(async (tx) => {
-            const newSong = await tx.song.create({
-                data: {
-                    title: body.title,
-                    genre: body.genre,
-                    duration: Math.round((file[0] as any)?.duration || 0),
-                    releaseDate: body.releaseDate ? new Date(body.releaseDate) : null,
-                    artistId: body.mainArtistId,
-                    albumId: body.albumId,
-                },
-                select: {
-                    songId: true,
-                }
-            });
+            const [{ songId }] = await tx.$queryRaw<{ songId: string }[]>`
+                INSERT INTO songs (title, genre, duration, release_date, artist_id, album_id)
+                VALUES (${body.title}, ${body.genre}, ${Math.round((file[0] as any)?.duration || 0)}, ${body.releaseDate ? new Date(body.releaseDate) : null}, ${body.mainArtistId}, ${body.albumId})
+                RETURNING song_id as "songId"
+            `;
 
             const allArtists = body.featuringArtistIds?.map((fa) => {
                 return {
-                    songId: newSong.songId,
+                    songId: songId,
                     artistId: fa,
                 }
             }) || [];
 
             allArtists.push({
-                songId: newSong.songId,
+                songId: songId,
                 artistId: body.mainArtistId,
             });
 
-            await tx.artistSong.createMany({
-                data: allArtists
-            });
+            await tx.$queryRaw`
+                INSERT INTO artists_songs (song_id, artist_id)
+                VALUES ${Prisma.join(allArtists.map(a => Prisma.sql`(${a.songId}, ${a.artistId})`))}
+            `;
 
-            return newSong;
+            return songId;
         });
 
         // this.rmqService.sendMessage({ songId: song.songId, files: file });

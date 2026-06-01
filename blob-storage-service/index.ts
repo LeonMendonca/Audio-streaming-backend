@@ -52,14 +52,14 @@ app.get("/health/db", async (req: Request, res: Response): Promise<any> => {
         version() as postgres_version,
         (SELECT sum(numbackends) FROM pg_stat_database) as active_connections
     `);
-    
+
     // 5-second graceful timeout
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Database query timeout')), 5000)
     );
 
     const result = await Promise.race([dbCheckPromise, timeoutPromise]) as any;
-    
+
     const dbStats = result.rows[0];
 
     res.status(200).json({
@@ -135,46 +135,55 @@ app.get(
   }
 );
 
+interface FileDetails {
+  fileName: string;
+  trackId: string;
+}
+
+const variants = [
+  { quality: "saver", bitrate: "64k" },
+  { quality: "standard", bitrate: "128k" },
+  { quality: "enhanced", bitrate: "320k" }
+];
+
 app.post(
   "/upload",
-  upload.single("audio"),
+  upload.array("audio"),
   async (req: Request, res: Response): Promise<any> => {
     try {
-      if (!req.file) {
+      const { audio_metadata } = req.body;
+      const fileDetailsBody: FileDetails[] = JSON.parse(audio_metadata);
+
+      const fileDetailsMap = new Map<string, string>(
+        fileDetailsBody.map(fd => [fd.fileName, fd.trackId])
+      );
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
         return res.status(400).json({ error: "No audio file provided" });
       }
-
-      let durationInSeconds = 0;
-      try {
-        const metadata = await mm.parseBuffer(req.file.buffer, req.file.mimetype);
-        if (metadata.format.duration) {
-          durationInSeconds = metadata.format.duration;
-        }
-      } catch (err) {
-        console.error("Could not parse audio metadata for duration", err);
-      }
-
       const tempDir = os.tmpdir();
-      const inputFilename = randomUUID();
-      const inputPath = path.join(tempDir, inputFilename);
 
-      await fsPromises.writeFile(inputPath, req.file.buffer);
+      const fileDetails = await Promise.all(
+        files.map(async (file) => {
+          const inputPath = path.join(tempDir, randomUUID());
+          await fsPromises.writeFile(inputPath, file.buffer);
 
-      const variants = [
-        { quality: "saver", bitrate: "64k" },
-        { quality: "standard", bitrate: "128k" },
-        { quality: "enhanced", bitrate: "320k" }
-      ];
+          return {
+            fileName: file.originalname,
+            inputPath,
+            trackId: fileDetailsMap.get(file.originalname)!
+          };
+        })
+      );
 
-      const trackId = req.body.trackId;
-
-      if (!trackId) {
-        return res.status(400).json({ error: "Track ID is required" });
-      }
-
-      const processVariant = (variant: typeof variants[0]): Promise<void> => {
+      const processVariant = (
+        variant: typeof variants[0],
+        trackId: string,
+        inputPath: string
+      ): Promise<void> => {
         return new Promise((resolve, reject) => {
-          const outputPath = path.join(tempDir, `${inputFilename}_${variant.bitrate}.m4a`);
+          const outputPath = path.join(tempDir, `${trackId}_${variant.bitrate}.m4a`);
           ffmpeg(inputPath)
             .audioCodec('aac')
             .audioBitrate(variant.bitrate)
@@ -201,19 +210,20 @@ app.post(
         });
       };
 
-      await Promise.all(variants.map((v) => processVariant(v)));
-      await fsPromises.unlink(inputPath).catch(() => { });
+      fileDetails.forEach(async (fd) => {
+        await Promise.all(variants.map((v) => processVariant(v, fd.trackId, fd.inputPath)));
+        await fsPromises.unlink(fd.inputPath)
+          .then(() => console.log("Unlinked file"))
+          .catch((err) => console.error("Error unlinking file", err));
+      });
 
       const variantDetails = variants.map(v => ({
         quality: v.quality,
         bitrate: v.bitrate,
-        key: `${trackId}-${v.quality}`
       }));
 
       res.status(201).json({
         message: "Audio processed successfully",
-        trackId,
-        duration: durationInSeconds,
         variants: variantDetails
       });
     } catch (error) {
