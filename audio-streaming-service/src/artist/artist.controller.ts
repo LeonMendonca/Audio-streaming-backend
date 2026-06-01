@@ -1,10 +1,11 @@
-import { Controller, FileTypeValidator, MaxFileSizeValidator, ParseBoolPipe, ParseFilePipe, Put, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Controller, ParseFilePipe, Put, Query, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { ArtistService } from './artist.service';
 import { Body, Post } from '@nestjs/common';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { AudioPipe } from './pipes/audio.pipe';
+import { CreateSongDto } from './dto/create-song.dto';
 
 @Controller('artist')
 export class ArtistController {
@@ -17,7 +18,7 @@ export class ArtistController {
 
   @UseInterceptors(FilesInterceptor('songs', 10))
   @Post('upload')
-  async uploadSong(@UploadedFiles(new ParseFilePipe({
+  async uploadSong(@Body() body: CreateSongDto, @UploadedFiles(new ParseFilePipe({
     validators: [
       new AudioPipe(
         {
@@ -30,9 +31,7 @@ export class ArtistController {
       )
     ]
   })) files: Express.Multer.File[]) {
-    console.log("FLE", files)
-    this.artistService.uploadSong(files)
-    return "OK"
+    await this.artistService.uploadSong(body, files)
   }
 
   @Put()

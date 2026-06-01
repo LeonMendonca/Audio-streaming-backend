@@ -24,7 +24,7 @@ datasource db {
 
 model User {
   userId           String    @id @default(uuid()) @map("UserID")
-  email            String    @unique @map("Email") @db.Citext
+  email            String    @unique @map("Email") @db.VarChar(255)
   passwordHash     String    @map("PasswordHash")
   createdAt        DateTime  @default(now()) @map("CreatedAt") @db.Timestamptz(6)
   lastLogin        DateTime? @map("LastLogin") @db.Timestamptz(6)
@@ -71,11 +71,12 @@ model Song {
   duration    Int       @map("Duration")
   releaseDate DateTime? @map("ReleaseDate") @db.Date
   createdAt   DateTime  @default(now()) @map("CreatedAt") @db.Timestamptz(6)
-  artistId    String?   @map("ArtistID")
+  artistId    String    @map("ArtistID")
   albumId     String?   @map("AlbumID")
+  status      String    @default("PENDING") @map("Status")
 
   // Relations
-  artist        Artist?        @relation(fields: [artistId], references: [artistId])
+  artist        Artist         @relation(fields: [artistId], references: [artistId])
   album         Album?         @relation(fields: [albumId], references: [albumId])
   playlistItems PlaylistItem[]
   artistSongs   ArtistSong[]
@@ -85,7 +86,7 @@ model Song {
 
 model Artist {
   artistId String  @id @default(uuid()) @map("ArtistID")
-  name     String  @map("Name") @db.Citext
+  name     String  @map("Name") @db.VarChar(100)
   country  String? @map("Country")
   bio      String? @map("Bio")
   imageUrl String? @map("ImageUrl")
@@ -99,14 +100,14 @@ model Artist {
 }
 
 model Album {
-  albumId     String   @id @default(uuid()) @map("AlbumID")
-  title       String   @map("Title")
+  albumId     String    @id @default(uuid()) @map("AlbumID")
+  title       String    @map("Title")
   releaseDate DateTime? @map("ReleaseDate") @db.Date
-  artistId    String   @map("ArtistID")
+  artistId    String    @map("ArtistID")
 
   // Relations
   artist Artist @relation(fields: [artistId], references: [artistId])
-  songs  Song[] 
+  songs  Song[]
 
   @@map("albums")
 }

@@ -4,6 +4,9 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import ffmpeg from 'fluent-ffmpeg';
+import ffprobe from 'ffprobe-static';
+
+ffmpeg.setFfprobePath(ffprobe.path);
 
 export type AudioPipeValidatorOptions = {
     maxDuration: number;
@@ -87,6 +90,7 @@ export class AudioPipe extends FileValidator<AudioPipeValidatorOptions> {
                 return false;
             }
 
+            (file as any).duration = audioInfo.duration;
             return true;
         } catch (err: any) {
             this.errorMessage = `Failed to process audio file: ${err.message}`;

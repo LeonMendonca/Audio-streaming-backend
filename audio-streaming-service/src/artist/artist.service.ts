@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma-service/prisma-service.service';
 import { CreateArtistDto } from './dto/create-artist.dto';
 import { UpdateArtistDto } from './dto/update-artist.dto';
+import { CreateSongDto } from './dto/create-song.dto';
 import { RmqService } from 'src/rabbitmq/rabbitmq.service';
 
 
@@ -31,8 +32,43 @@ export class ArtistService {
         return artist;
     }
 
-    async uploadSong(file: Express.Multer.File[]) {
-        this.rmqService.sendMessage(file)
+    async uploadSong(body: CreateSongDto, file: Express.Multer.File[]) {
+        const song = await this.prisma.$transaction(async (tx) => {
+            const newSong = await tx.song.create({
+                data: {
+                    title: body.title,
+                    genre: body.genre,
+                    duration: Math.round((file[0] as any)?.duration || 0),
+                    releaseDate: body.releaseDate ? new Date(body.releaseDate) : null,
+                    artistId: body.mainArtistId,
+                    albumId: body.albumId,
+                },
+                select: {
+                    songId: true,
+                }
+            });
+
+            const allArtists = body.featuringArtistIds?.map((fa) => {
+                return {
+                    songId: newSong.songId,
+                    artistId: fa,
+                }
+            }) || [];
+
+            allArtists.push({
+                songId: newSong.songId,
+                artistId: body.mainArtistId,
+            });
+
+            await tx.artistSong.createMany({
+                data: allArtists
+            });
+
+            return newSong;
+        });
+
+        // this.rmqService.sendMessage({ songId: song.songId, files: file });
+        return song;
     }
 
     async updateArtist(artistId: string, { name, bio, imageUrl }: UpdateArtistDto) {

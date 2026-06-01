@@ -24,6 +24,7 @@ export class CreateSongDto {
   @IsUUID()
   mainArtistId: string;
 
+  @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
   @IsUUID('4', { each: true })
