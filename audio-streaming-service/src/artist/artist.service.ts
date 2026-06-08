@@ -33,11 +33,13 @@ export class ArtistService {
         return artist;
     }
 
-    async uploadSong(body: CreateSongDto, file: Express.Multer.File[]) {
-        const song = await this.prisma.$transaction(async (tx) => {
+    // NOTE : Though files are sent, we only use the first file for now.
+    // since, uploadSong supports only 1 song at a time
+    async uploadSong(body: CreateSongDto, files: Express.Multer.File[]) {
+        const songId = await this.prisma.$transaction(async (tx) => {
             const [{ songId }] = await tx.$queryRaw<{ songId: string }[]>`
                 INSERT INTO songs (title, genre, duration, release_date, artist_id, album_id)
-                VALUES (${body.title}, ${body.genre}, ${Math.round((file[0] as any)?.duration || 0)}, ${body.releaseDate ? new Date(body.releaseDate) : null}, ${body.mainArtistId}, ${body.albumId})
+                VALUES (${body.title}, ${body.genre}, ${Math.round((files[0] as any)?.duration || 0)}, ${body.releaseDate ? new Date(body.releaseDate) : null}, ${body.mainArtistId}, ${body.albumId})
                 RETURNING song_id as "songId"
             `;
 
@@ -61,8 +63,9 @@ export class ArtistService {
             return songId;
         });
 
-        // this.rmqService.sendMessage({ songId: song.songId, files: file });
-        return song;
+        // send to blob service via RabbitMQ
+        this.rmqService.sendMessage({ songId: songId, file: files[0] });
+        return songId;
     }
 
     async updateArtist(artistId: string, { name, bio, imageUrl }: UpdateArtistDto) {

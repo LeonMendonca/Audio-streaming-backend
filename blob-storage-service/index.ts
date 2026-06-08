@@ -9,7 +9,9 @@ import { randomUUID } from "node:crypto";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import * as mm from "music-metadata";
+import { insertIntoDb } from "./utils/insert-audio";
+import { processAudioVariants } from "./utils/process-variants";
+import { variants } from "./constants/audio.constants.variants";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -140,12 +142,6 @@ interface FileDetails {
   trackId: string;
 }
 
-const variants = [
-  { quality: "saver", bitrate: "64k" },
-  { quality: "standard", bitrate: "128k" },
-  { quality: "enhanced", bitrate: "320k" }
-];
-
 app.post(
   "/upload",
   upload.array("audio"),
@@ -177,45 +173,14 @@ app.post(
         })
       );
 
-      const processVariant = (
-        variant: typeof variants[0],
-        trackId: string,
-        inputPath: string
-      ): Promise<void> => {
-        return new Promise((resolve, reject) => {
-          const outputPath = path.join(tempDir, `${trackId}_${variant.bitrate}.m4a`);
-          ffmpeg(inputPath)
-            .audioCodec('aac')
-            .audioBitrate(variant.bitrate)
-            .format('mp4')
-            .outputOptions('-movflags +faststart')
-            .save(outputPath)
-            .on('end', async () => {
-              try {
-                const audioData = await fsPromises.readFile(outputPath);
-                const key = `${trackId}-${variant.quality}`;
-                await db.query(`
-                  INSERT INTO blobs (key, data)
-                  VALUES ($1, $2)
-                `, [key, audioData]);
-                await fsPromises.unlink(outputPath).catch(() => { });
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            })
-            .on('error', (err) => {
-              reject(err);
-            });
-        });
-      };
-
-      fileDetails.forEach(async (fd) => {
-        await Promise.all(variants.map((v) => processVariant(v, fd.trackId, fd.inputPath)));
-        await fsPromises.unlink(fd.inputPath)
-          .then(() => console.log("Unlinked file"))
-          .catch((err) => console.error("Error unlinking file", err));
-      });
+      await Promise.all(fileDetails.map(async (fd) => {
+        console.time("processing variant " + fd.trackId);
+        const audioDetails = await Promise.all(
+          variants.map((v, idx) => processAudioVariants(tempDir, v, fd.trackId, fd.inputPath, idx + 1))
+        );
+        console.timeEnd("processing variant " + fd.trackId);
+        await insertIntoDb(audioDetails, db);
+      }));
 
       const variantDetails = variants.map(v => ({
         quality: v.quality,
