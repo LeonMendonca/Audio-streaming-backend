@@ -27,6 +27,7 @@ model User {
   email            String    @unique @map("email") @db.VarChar(255)
   passwordHash     String    @map("password_hash")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   lastLogin        DateTime? @map("last_login") @db.Timestamptz(6)
   subscriptionType String?   @map("subscription_type")
   country          String?   @map("country")
@@ -38,10 +39,11 @@ model User {
 }
 
 model Playlist {
-  playlistId String   @id @default(dbgenerated("gen_random_uuid()")) @map("playlist_id")
-  ownerId    String   @map("owner_id")
-  name       String   @map("name")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  playlistId String    @id @default(dbgenerated("gen_random_uuid()")) @map("playlist_id")
+  ownerId    String    @map("owner_id")
+  name       String    @map("name")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   owner         User           @relation(fields: [ownerId], references: [userId])
@@ -51,10 +53,12 @@ model Playlist {
 }
 
 model PlaylistItem {
-  playlistId String   @map("playlist_id")
-  songId     String   @map("song_id")
-  position   Int      @map("position")
-  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+  playlistId String    @map("playlist_id")
+  songId     String    @map("song_id")
+  position   Int       @map("position")
+  addedAt    DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   playlist Playlist @relation(fields: [playlistId], references: [playlistId])
@@ -71,6 +75,7 @@ model Song {
   duration    Int       @map("duration")
   releaseDate DateTime? @map("release_date") @db.Date
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   artistId    String    @map("artist_id")
   albumId     String?   @map("album_id")
   status      String    @default("PENDING") @map("status")
@@ -85,11 +90,13 @@ model Song {
 }
 
 model Artist {
-  artistId String  @id @default(dbgenerated("gen_random_uuid()")) @map("artist_id")
-  name     String  @map("name") @db.VarChar(100)
-  country  String? @map("country")
-  bio      String? @map("bio")
-  imageUrl String? @map("image_url")
+  artistId  String    @id @default(dbgenerated("gen_random_uuid()")) @map("artist_id")
+  name      String    @map("name") @db.VarChar(100)
+  country   String?   @map("country")
+  bio       String?   @map("bio")
+  imageUrl  String?   @map("image_url")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   songs       Song[]
@@ -104,6 +111,9 @@ model Album {
   title       String    @map("title")
   releaseDate DateTime? @map("release_date") @db.Date
   artistId    String    @map("artist_id")
+  isDefault   Boolean   @default(false) @map("is_default")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   artist Artist @relation(fields: [artistId], references: [artistId])
@@ -114,12 +124,14 @@ model Album {
 
 // Explicit Many to Many relation
 model ArtistSong {
-  songId   String @map("song_id")
-  artistId String @map("artist_id")
+  songId    String    @map("song_id")
+  artistId  String    @map("artist_id")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  song   Song   @relation(fields: [songId], references: [songId])
-  artist Artist @relation(fields: [artistId], references: [artistId])
+  song   Song   @relation(fields: [songId], references: [songId], onDelete: Cascade)
+  artist Artist @relation(fields: [artistId], references: [artistId], onDelete: Cascade)
 
   @@id([songId, artistId])
   @@map("artists_songs")

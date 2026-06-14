@@ -12,7 +12,7 @@ async function bootstrap() {
         durable: true,
       },
       noAck: false, // Ensures manual acknowledgment is required (set up in the consumer file)
-      prefetchCount: 1, // Number of messages to process concurrently per instance
+      prefetchCount: 5, // Number of messages to process concurrently per instance
     },
   });
 

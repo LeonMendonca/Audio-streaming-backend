@@ -19,6 +19,23 @@ import { RmqService } from './rabbitmq.service';
                     },
                 }),
             },
+            {
+                name: 'RABBITMQ_DELAY_SERVICE',
+                useFactory: () => ({
+                    transport: Transport.RMQ,
+                    options: {
+                        urls: [process.env.RABBITMQ_URL!],
+                        queue: `${process.env.RABBITMQ_QUEUE!}_delay`,
+                        queueOptions: {
+                            durable: true,
+                            arguments: {
+                                'x-dead-letter-exchange': '',
+                                'x-dead-letter-routing-key': process.env.RABBITMQ_QUEUE!,
+                            },
+                        },
+                    },
+                }),
+            },
         ]),
     ],
     providers: [RmqService],
